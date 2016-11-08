@@ -128,7 +128,12 @@ def processServer(conn, client):
                     modResp = modHeaders.encode(proxyEncScheme) + body
                     conn.send(modResp)
             else:
-                conn.send(response)
+                # send blank message to other proxy
+                emptyBA = bitarray.bitarray()
+                modHeaders, messageSent = modifyCase(headers, emptyBA)
+                modResp = modHeaders.encode(proxyEncScheme) + body
+                conn.send(modResp)
+
             sWeb.close()
         except KeyError as err:
             print(str(err))
@@ -141,6 +146,10 @@ def processServer(conn, client):
 def interpretCase(modifiedReq, bits):
     requestLine, headers = extractHeaders(modifiedReq)
     tuples = headers.items()
+
+    # check for blank message
+    if requestLine.endswith('  '):
+        return True
 
     eofFound = False
     for header, value in tuples:
@@ -163,6 +172,12 @@ def modifyCase(request, bits):
     # get header-value tuples
     requestLine, headers = extractHeaders(request)
     tuples = headers.items()
+
+    # check for blank message
+    if (bits.length() == 0):
+        requestLine += '  '
+        newRequest = requestLine + '\r\n' + headers.as_string()
+        return newRequest, True
 
     messageSent = False
     # modify the case of each header
