@@ -68,9 +68,9 @@ def processBrowser(conn, client):
                         recvMsg = responseBits.tobytes().decode(proxyEncScheme)[::-1]
                         print("Received message: " + recvMsg)
 
-                # forward the message to the browser
-                response = top.encode(browserEncScheme) + body
-                conn.send(response)
+                    # forward the message to the browser
+                    response = top.encode(browserEncScheme) + crlf + body
+                    conn.send(response)
 
         sOther.close()
         conn.close()
