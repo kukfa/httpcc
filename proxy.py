@@ -8,6 +8,7 @@ import socket
 import struct
 import sys
 import threading
+import time
 
 maxRecvSize = 4096
 browserEncScheme = 'utf-8'
@@ -59,13 +60,14 @@ def processBrowser(conn, client):
                 top, crlf, body = response.partition(b'\x0D\x0A\x0D\x0A')
                 top = top.decode(proxyEncScheme)
 
-                # extract covert message, determine if message incomplete
+                # determine if message incomplete
                 eofFound = interpretCase(top, responseBits)
-                if eofFound:
-                    extractMessage(responseBits)
-                    # forward the message to the browser
-                    response = top.encode(browserEncScheme) + crlf + body
-                    conn.send(response)
+
+            # extract covert message
+            extractMessage(responseBits)
+            # forward the message to the browser
+            response = top.encode(browserEncScheme) + crlf + body
+            conn.send(response)
 
     except socket.error as err:
         print("Error connecting to other proxy: " + str(err))
@@ -78,15 +80,15 @@ def processBrowser(conn, client):
 
 '''
 Logic for the server-side proxy
-'''
+''' #TODO rework while
 def processServer(conn, client):
     eofFound = False
     bits = bitarray.bitarray()
     while not eofFound:
         # receive request with covert message
         modifiedReq = conn.recv(maxRecvSize).decode(proxyEncScheme)
-        if (len(modifiedReq) == 0):
-            break
+        #if (len(modifiedReq) == 0):
+        #    break
 
         # extract the covert message
         eofFound = interpretCase(modifiedReq, bits)
@@ -122,6 +124,8 @@ def processServer(conn, client):
                     # send modified response to other proxy
                     modResp = modHeaders.encode(proxyEncScheme) + body
                     conn.send(modResp)
+                    time.sleep(.5)
+
             else:
                 # send automated blank message to other proxy
                 responseLine, headers = extractHeaders(headers)
