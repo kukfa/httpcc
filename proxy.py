@@ -61,18 +61,12 @@ def processBrowser(conn, client):
 
                 # extract covert message, determine if message incomplete
                 eofFound = interpretCase(top, responseBits)
-
                 if eofFound:
-                    for i in range(responseBits.length() % 8):
-                        responseBits.pop()
-                    if (responseBits.length() > 0):
-                        responseBits.bytereverse()
-                        recvMsg = responseBits.tobytes().decode(proxyEncScheme)[::-1]
-                        print("Received message: " + recvMsg)
-
+                    extractMessage(responseBits)
                     # forward the message to the browser
                     response = top.encode(browserEncScheme) + crlf + body
                     conn.send(response)
+
     except socket.error as err:
         print("Error connecting to other proxy: " + str(err))
     finally:
@@ -97,12 +91,7 @@ def processServer(conn, client):
         # extract the covert message
         eofFound = interpretCase(modifiedReq, bits)
         if eofFound:
-            for i in range(bits.length() % 8):
-                bits.pop()
-            if (bits.length() > 0):
-                bits.bytereverse()
-                recvMsg = bits.tobytes().decode(proxyEncScheme)[::-1]
-                print("Received message: " + recvMsg)
+            extractMessage(bits)
 
         try:
             # determine intended web server
@@ -140,6 +129,7 @@ def processServer(conn, client):
                 newResponse = responseLine + '\r\n' + headers.as_string()
                 modResp = newResponse.encode(proxyEncScheme) + body
                 conn.send(modResp)
+
         except KeyError as err:
             print(str(err))
         except socket.error as err:
@@ -249,7 +239,13 @@ def extractHeaders(request):
     return requestLine, headers
 
 
-#def extractMessage TODO implement this?
+def extractMessage(bits):
+    for i in range(bits.length() % 8):
+        bits.pop()
+    if (bits.length() > 0):
+        bits.bytereverse()
+        recvMsg = bits.tobytes().decode(proxyEncScheme)[::-1]
+        print("Received message: " + recvMsg)
 
 
 def main():
