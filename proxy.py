@@ -87,13 +87,11 @@ def processServer(conn, client):
     while not eofFound:
         # receive request with covert message
         modifiedReq = conn.recv(maxRecvSize).decode(proxyEncScheme)
-        #if (len(modifiedReq) == 0):
-        #    break
+        if (len(modifiedReq) == 0):
+            break
 
         # extract the covert message
         eofFound = interpretCase(modifiedReq, bits)
-        if eofFound:
-            extractMessage(bits)
 
         try:
             # determine intended web server
@@ -109,24 +107,7 @@ def processServer(conn, client):
             headers, crlf, body = response.partition(b'\x0D\x0A\x0D\x0A')
             headers = headers.decode(browserEncScheme)
 
-            if eofFound:
-                # get message and convert it to bit representation
-                message = input("Enter message to send: ")
-                sendBits = bitarray.bitarray()
-                sendBits.frombytes(message.encode(proxyEncScheme))
-
-                # use this response to send entire covert message
-                messageSent = False
-                while not messageSent:
-                    # insert covert message, determine if more requests needed
-                    modHeaders, messageSent = modifyCase(headers, sendBits)
-
-                    # send modified response to other proxy
-                    modResp = modHeaders.encode(proxyEncScheme) + body
-                    conn.send(modResp)
-                    time.sleep(.5)
-
-            else:
+            if not eofFound:
                 # send automated blank message to other proxy
                 responseLine, headers = extractHeaders(headers)
                 responseLine += '  '
@@ -134,15 +115,31 @@ def processServer(conn, client):
                 modResp = newResponse.encode(proxyEncScheme) + body
                 conn.send(modResp)
 
-        except KeyError as err:
+        except (KeyError, socket.error) as err:
             print(str(err))
-        except socket.error as err:
-            print("Error connecting to web server: " + str(err))
+            sWeb.close()
+            conn.close()
 
-    if sWeb:
-        sWeb.close()
-    if conn:
-        conn.close()
+    extractMessage(bits)
+
+    # get message and convert it to bit representation
+    message = input("Enter message to send: ")
+    sendBits = bitarray.bitarray()
+    sendBits.frombytes(message.encode(proxyEncScheme))
+
+    # use last response to send entire covert message
+    messageSent = False
+    while not messageSent:
+        # insert covert message, determine if more requests needed
+        modHeaders, messageSent = modifyCase(headers, sendBits)
+
+        # send modified response to other proxy
+        modResp = modHeaders.encode(proxyEncScheme) + body
+        conn.send(modResp)
+        time.sleep(.5)
+
+    sWeb.close()
+    conn.close()
 
 
 def interpretCase(modifiedReq, bits):
