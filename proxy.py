@@ -99,9 +99,10 @@ def processServer(conn, client):
         if eofFound:
             for i in range(bits.length() % 8):
                 bits.pop()
-            bits.bytereverse()
-            recvMsg = bits.tobytes().decode(proxyEncScheme)[::-1]
-            print("Received message: " + recvMsg)
+            if (bits.length() > 0):
+                bits.bytereverse()
+                recvMsg = bits.tobytes().decode(proxyEncScheme)[::-1]
+                print("Received message: " + recvMsg)
 
         try:
             # determine intended web server
@@ -133,28 +134,33 @@ def processServer(conn, client):
                     modResp = modHeaders.encode(proxyEncScheme) + body
                     conn.send(modResp)
             else:
-                # send blank message to other proxy
-                emptyBA = bitarray.bitarray()
-                modHeaders, messageSent = modifyCase(headers, emptyBA)
-                modResp = modHeaders.encode(proxyEncScheme) + body
+                # send automated blank message to other proxy
+                responseLine, headers = extractHeaders(headers)
+                responseLine += '  '
+                newResponse = responseLine + '\r\n' + headers.as_string()
+                modResp = newResponse.encode(proxyEncScheme) + body
                 conn.send(modResp)
         except KeyError as err:
             print(str(err))
         except socket.error as err:
             print("Error connecting to web server: " + str(err))
-        finally:
-            if sWeb:
-                sWeb.close()
-            if conn:
-                conn.close()
+
+    if sWeb:
+        sWeb.close()
+    if conn:
+        conn.close()
 
 
 def interpretCase(modifiedReq, bits):
     requestLine, headers = extractHeaders(modifiedReq)
     tuples = headers.items()
 
-    # check for blank message
-    if requestLine.endswith('  '):
+    # check for user-entered blank message
+    if requestLine.endswith('   '):
+        print("Received message:")
+        return True
+    # check for automated blank message
+    elif requestLine.endswith('  '):
         return True
 
     eofFound = False
@@ -179,9 +185,9 @@ def modifyCase(request, bits):
     requestLine, headers = extractHeaders(request)
     tuples = headers.items()
 
-    # check for blank message
+    # check for user-entered blank message
     if (bits.length() == 0):
-        requestLine += '  '
+        requestLine += '   '
         newRequest = requestLine + '\r\n' + headers.as_string()
         return newRequest, True
 
