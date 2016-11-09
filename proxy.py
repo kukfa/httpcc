@@ -17,7 +17,6 @@ otherIP = None
 otherPort = None
 serverMode = False
 
-#TODO handle exceptions gracefully
 
 '''
 Logic for the browser-side proxy
@@ -49,18 +48,21 @@ def processBrowser(conn, client):
             sOther.send(modifiedReq.encode(proxyEncScheme))
 
             responseBits = bitarray.bitarray()
-            # loop until entire covert message received
             eofFound = False
-            while not (eofFound):
+            # loop until entire covert message received
+            while not eofFound:
                 # receive response from other proxy
                 response = sOther.recv(maxRecvSize)
+                if (len(response) == 0):
+                    break
+
                 top, crlf, body = response.partition(b'\x0D\x0A\x0D\x0A')
                 top = top.decode(proxyEncScheme)
 
                 # extract covert message, determine if message incomplete
                 eofFound = interpretCase(top, responseBits)
 
-                if (eofFound):
+                if eofFound:
                     for i in range(responseBits.length() % 8):
                         responseBits.pop()
                     if (responseBits.length() > 0):
@@ -71,12 +73,13 @@ def processBrowser(conn, client):
                     # forward the message to the browser
                     response = top.encode(browserEncScheme) + crlf + body
                     conn.send(response)
-
-        sOther.close()
-        conn.close()
     except socket.error as err:
         print("Error connecting to other proxy: " + str(err))
-        conn.close()
+    finally:
+        if sOther:
+            sOther.close()
+        if conn:
+            conn.close()
 
 
 '''
@@ -85,15 +88,23 @@ Logic for the server-side proxy
 def processServer(conn, client):
     eofFound = False
     bits = bitarray.bitarray()
-    while not (eofFound):
+    while not eofFound:
         # receive request with covert message
         modifiedReq = conn.recv(maxRecvSize).decode(proxyEncScheme)
+        if (len(modifiedReq) == 0):
+            break
 
         # extract the covert message
         eofFound = interpretCase(modifiedReq, bits)
+        if eofFound:
+            for i in range(bits.length() % 8):
+                bits.pop()
+            bits.bytereverse()
+            recvMsg = bits.tobytes().decode(proxyEncScheme)[::-1]
+            print("Received message: " + recvMsg)
 
-        # determine intended web server
         try:
+            # determine intended web server
             webSrv, webPort = determineWebSrv(modifiedReq)
             sWeb = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             sWeb.connect((webSrv, webPort))
@@ -106,13 +117,7 @@ def processServer(conn, client):
             headers, crlf, body = response.partition(b'\x0D\x0A\x0D\x0A')
             headers = headers.decode(browserEncScheme)
 
-            if (eofFound):
-                for i in range(bits.length() % 8):
-                    bits.pop()
-                bits.bytereverse()
-                recvMsg = bits.tobytes().decode(proxyEncScheme)[::-1]
-                print("Received message: " + recvMsg)
-
+            if eofFound:
                 # get message and convert it to bit representation
                 message = input("Enter message to send: ")
                 sendBits = bitarray.bitarray()
@@ -133,14 +138,15 @@ def processServer(conn, client):
                 modHeaders, messageSent = modifyCase(headers, emptyBA)
                 modResp = modHeaders.encode(proxyEncScheme) + body
                 conn.send(modResp)
-
-            sWeb.close()
         except KeyError as err:
             print(str(err))
-            sys.exit(1)
         except socket.error as err:
             print("Error connecting to web server: " + str(err))
-            sys.exit(1)
+        finally:
+            if sWeb:
+                sWeb.close()
+            if conn:
+                conn.close()
 
 
 def interpretCase(modifiedReq, bits):
@@ -156,12 +162,12 @@ def interpretCase(modifiedReq, bits):
         chars = list(header)
 
         for char in chars:
-            if (char.islower()):
+            if char.islower():
                 bits.append(False)
-            elif (char.isupper()):
+            elif char.isupper():
                 bits.append(True)
 
-        if (value.endswith('  ')):
+        if value.endswith('  '):
             eofFound = True
             break
 
@@ -186,7 +192,7 @@ def modifyCase(request, bits):
         chars = list(header)
 
         for j in range(len(chars)):
-            if (chars[j].isalpha()):
+            if chars[j].isalpha():
                 try:
                     bit = bits.pop()
                 except IndexError:
@@ -259,21 +265,23 @@ def main():
         s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         s.bind(('', listPort))
         s.listen(1)
+    except socket.err as err:
+        print("Error opening socket: " + err)
+        sys.exit(1)
 
-        # handle incoming connections
-        while True:
+    # handle incoming connections
+    while True:
+        try:
             conn, client = s.accept()
-            if (serverMode):
+            if serverMode:
                 t = threading.Thread(target=processServer, args=(conn, client))
             else:
                 t = threading.Thread(target=processBrowser, args=(conn, client))
             t.start()
-    except socket.error as err:
-        print("Error opening socket: " + err)
-    except KeyboardInterrupt:
-        pass
-
-    s.close()
+        except KeyboardInterrupt:
+            if s:
+                s.close()
+            os._exit(1)
 
 
 if __name__ == '__main__':
