@@ -197,26 +197,30 @@ def modifyCase(request, bits):
         header, value = tuples[i]
         chars = list(header)
 
-        for j in range(len(chars)):
-            if chars[j].isalpha():
-                try:
-                    bit = bits.pop()
-                except IndexError:
-                    # append EOF indicator
-                    value += '  '
-                    break
+        if (bits.length() != 0):
+            for j in range(len(chars)):
+                if chars[j].isalpha():
+                    try:
+                        bit = bits.pop()
+                    except IndexError:
+                        chars[j] = chars[j].lower()
+                        continue
 
-                if (bit == True):
-                    chars[j] = chars[j].upper()
-                else:
-                    chars[j] = chars[j].lower()
+                    # bit == 1
+                    if bit:
+                        chars[j] = chars[j].upper()
+                    # bit == 0
+                    else:
+                        chars[j] = chars[j].lower()
+
+            # append EOF indicator
+            if (bits.length() == 0):
+                messageSent = True
+                value += '  '
 
         del headers[header]
         newHeader = ''.join(chars)
         headers[newHeader] = value
-
-        if (len(bits) == 0):
-            messageSent = True
 
     # rebuild the request
     newHeaders = headers.as_string()
