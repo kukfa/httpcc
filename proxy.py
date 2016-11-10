@@ -8,7 +8,6 @@ import socket
 import struct
 import sys
 import threading
-import time
 
 maxRecvSize = 4096
 browserEncScheme = 'utf-8'
@@ -80,8 +79,11 @@ def processBrowser(conn, client):
 
 '''
 Logic for the server-side proxy
-''' #TODO rework while
+'''
 def processServer(conn, client):
+    # set TCP_NODELAY to avoid combining sent packets
+    conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+
     eofFound = False
     bits = bitarray.bitarray()
     while not eofFound:
@@ -136,7 +138,6 @@ def processServer(conn, client):
         # send modified response to other proxy
         modResp = modHeaders.encode(proxyEncScheme) + body
         conn.send(modResp)
-        time.sleep(.5)
 
     sWeb.close()
     conn.close()
